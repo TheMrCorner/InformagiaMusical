@@ -1,48 +1,96 @@
-# Sesion 3 de laboratorio, testeando cosas
-import pyaudio, wave, kbhit
+# Laboratory Sesions 3-4
+import pyaudio, kbhit
+import numpy as np  # Arrays
+from scipy.io import wavfile  # wav management
 
-#Abriendo archivos de audio
-wf = wave.open('fray.wav', 'rb')
+# Global variables
+CHUNK = 1024 # Buffer size
 
-# Lectura de pulsaciones de teclado
-kb = kbhit.KBHit()
+# Cargamos el archivo wav en la variable data
+SRATE, data = wavfile.read('song.wav')
 
-# Instancia de PyAudio
+# Check de formato de samples
+if data.dtype == 'int16':      formt = 2
+elif data.dtype == 'int32':    formt = 4
+elif data.dtype == 'float32':  formt = 4
+elif data.dtype == 'uint8':    formt = 1
+else: raise Exception('Data format not supported')
+
+# Prepare PyAudio
+# Init and create instance
 p = pyaudio.PyAudio()
 
-print("Hello There!")
+block = np.arange(CHUNK, dtype=data.dtype)  # Array
+
+# Defining callbacks
+def callback (in_data, frame_count, time_info, status):
+    # frame_count: number of frames to return
+    # frame_count = CHUNK
+    global numBlocks = 0
+    print ("Callback bloque ", numBlocks, "fc: ", frame_count)
+
+    # Block's array
+    block = data [numBlocks*CHUNK : numBlocks*CHUNK+CHUNK]
+    numBlocks += 1
+
+    # Return block
+    return (block, pyaudio.paContinue)
 
 # Stream
 stream = p.open(
-    format=p.get_format_from_width(wf.getsampwidth()),
-    channels=wf.getnchannels(),
-    rate=wf.getframerate(),
-    output=True)
+    format=p.get_format_from_width(formt),   # Sample format
+    channels=len(data.shape),                # Channels
+    rate=SRATE,                              # Frecuency
+    frames_per_buffer=CHUNK,                 # Buffer size
+    output=True)                             # Stream output
 
-CHUNK = 1024
+# Keyboard reading
+kb = kbhit.KBHit()
 
-# Leemos los datos del wav
-data = wf.readframes(CHUNK)
+# Testing keyboard reading
+# c = ' '
+# while c != 'q':
+#     if kb.kbhit():
+#         c = kb.getch()
+#         print("Tecla pulsada: ", c)
 
-c = ' '
-while c != 'q':
+# Processing each chunk of sound
+numBlocks = 0                                # Counter
+char = ' '
+vol = 1.0
+while char != 'q':
+    # new block
+
+    # Volume modification
+    block = block*vol
+
+    # write on stream converting type
+    stream.write(block.astype((data.dtype)).tobytes())
+
     if kb.kbhit():
-        c = kb.getch()
-        print("Tecla pulsada: ", c)
+        char = kb.getch()
+        if (char == 'v'): 
+            vol = max(0, vol-0.05)
+        elif (char == 'V'): 
+            vol = min(1, vol+0.05)
+        print("Vol: ", vol)
 
+    numBlocks += 1
+
+# Write on the stream, this blocks the program
+# cont = 1
+# while len(data) > 0:
+#     print("Reproduciendo chunk: ", cont)
+#     stream.write(data)
+#     data = wf.readframes(CHUNK)
+#     cont = cont + 1
+
+# Ending and stopping kbhit
 kb.set_normal_term()
 
-# Escribimos en stream, esto es bloqueante
-cont = 1
-while len(data) > 0:
-    print("Reproduciendo chunk: ", cont)
-    stream.write(data)
-    data = wf.readframes(CHUNK)
-    cont = cont + 1
-
-# Finalizamos el stream
+# Stopping and ending stream
 stream.stop_stream()
 stream.close()
 
-# finalizamos
+# Ending program
 p.terminate()
